@@ -51,6 +51,7 @@
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QDialog>
+#include <QDir>
 #include <QDockWidget>
 #include <QDropEvent>
 #include <QElapsedTimer>
@@ -61,6 +62,7 @@
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QList>
@@ -1687,25 +1689,55 @@ void MainWindow::actionPythonRevokeTrustedFiles()
 void MainWindow::actionPythonCreateVenv()
 {
 #ifdef ENABLE_PYTHON
-  const QString selectedDir = QFileDialog::getExistingDirectory(this, "Create Virtual Environment");
+  QString selectedDir = QFileDialog::getExistingDirectory(this, "Create Virtual Environment");
   if (selectedDir.isEmpty()) {
     return;
   }
 
-  const QDir venvDir{selectedDir};
+  QDir venvDir{selectedDir};
   if (!venvDir.exists()) {
     // Should not happen, but just in case double check...
     QMessageBox::critical(this, _("Create Virtual Environment"),
                           "Directory does not exist. Can't create virtual environment.",
                           QMessageBox::Ok);
-    return;
   }
 
   if (!venvDir.isEmpty()) {
     QMessageBox::critical(this, _("Create Virtual Environment"),
                           "Directory is not empty. Can't create virtual environment.",
                           QMessageBox::Ok);
-    return;
+  }
+
+  if ((!venvDir.exists())||(!venvDir.isEmpty())) {
+    QMessageBox::StandardButton reply = QMessageBox::critical(this, _("Create Virtual Environment"),
+                          "Would you like to create a virtual environment in a new directory?",
+                          QMessageBox::Yes | QMessageBox::No);//Prompt user to make new directory
+    if (reply == QMessageBox::No) {
+      return;//returns is user selects no
+    }
+    else {//if user selects yes
+      bool ok;//bool to check if user selects ok
+      QString newDirName = QInputDialog::getText(this, 
+                                                 "Create New Directory", 
+                                                 "Enter the name of the new directory:", 
+                                                 QLineEdit::Normal, 
+                                                 "", //Prompts user for new directory name
+                                                 &ok);
+      if (ok && !newDirName.isEmpty()) {//if user selects ok and enters a non-empty name
+          QDir parent(parentDir);//Makes new QDir object
+          if (parent.mkpath(newDirName)) {//Attempts to make the new directory
+              QMessageBox::information(this, "Success", "Directory created successfully.");
+              selectedDir = newDirName;//Sets new directory to selectedDir
+              venvDir = QDir(parent.absoluteFilePath(newDirName));//Sets venvDir to the new directory
+          } else {//If directory creation fails
+              QMessageBox::critical(this, "Error", "Failed to create the directory.");
+              return;
+            }
+      } else {//If user selects cancel or enters an empty name
+          QMessageBox::information(this, "Cancelled", "Directory creation was cancelled.");
+          return;
+      }//IMPORTANT: NOT ACTUALLY TESTED
+    }
   }
 
   const auto& path = venvDir.absolutePath().toStdString();
